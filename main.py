@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta, time as dtime
 from decimal import Decimal
 from io import BytesIO
 import telegram
+import os
 import subprocess
 import sys
 
@@ -14,7 +15,6 @@ import matplotlib.pyplot as plt
 from openpyxl import Workbook
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
-from telegram.error import Conflict
 try:
     # PTB v20+
     from telegram.constants import ChatAction
@@ -36,14 +36,8 @@ except ImportError:
     subprocess.check_call(
         [sys.executable, "-m", "pip", "install", "--no-cache-dir", "python-telegram-bot==20.8"]
     )
-    from telegram.ext import (
-        Application,
-        CallbackQueryHandler,
-        CommandHandler,
-        ContextTypes,
-        MessageHandler,
-        filters,
-    )
+    # Restart process so newly installed package is imported cleanly.
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 from config import is_admin as is_admin_cfg, load_settings
 from db import (
@@ -2411,17 +2405,9 @@ def main() -> None:
     except Exception:
         pass
 
-    def _polling_error_callback(err: Exception) -> None:
-        # If another instance is polling the same token, exit quickly instead of noisy retry loops.
-        if isinstance(err, Conflict):
-            raise SystemExit(
-                "Telegram conflict: another getUpdates instance is running for this bot token."
-            )
-
     app.run_polling(
         allowed_updates=Update.ALL_TYPES,
         poll_interval=0.5,
-        error_callback=_polling_error_callback,
     )
 
 
