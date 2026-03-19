@@ -3,6 +3,7 @@ import random
 from datetime import date, datetime, timedelta, time as dtime
 from decimal import Decimal
 from io import BytesIO
+import telegram
 
 import matplotlib
 
@@ -11,7 +12,7 @@ import matplotlib.pyplot as plt
 from openpyxl import Workbook
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
-from telegram import ChatAction
+from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -89,6 +90,24 @@ from utils import clamp_range, fmt_money, parse_decimal
 
 
 DEFAULT_AI_FALLBACK = "Good trade 🔥"
+
+
+def _ensure_ptb_compat() -> None:
+    """
+    Runtime guard for python-telegram-bot major version compatibility.
+    This codebase uses PTB v20+ APIs (Application, filters, async handlers).
+    """
+    raw = str(getattr(telegram, "__version__", "0"))
+    major_str = raw.split(".", 1)[0]
+    try:
+        major = int(major_str)
+    except ValueError:
+        major = 0
+    if major < 20:
+        raise RuntimeError(
+            "Incompatible python-telegram-bot version detected. "
+            "Please install python-telegram-bot>=20,<21."
+        )
 
 
 def translate_text(lang: str | None, key: str) -> str:
@@ -2294,6 +2313,7 @@ async def inactive_reminder_job(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def main() -> None:
+    _ensure_ptb_compat()
     settings = load_settings()
     init_db(settings.db_path)
     global_premium = get_global_premium(settings.db_path)
