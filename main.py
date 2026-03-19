@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from openpyxl import Workbook
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
-from telegram import ChatAction
+from telegram.constants import ChatAction
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
