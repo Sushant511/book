@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from openpyxl import Workbook
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputFile, Update
+from telegram.error import Conflict
 try:
     # PTB v20+
     from telegram.constants import ChatAction
@@ -23,6 +24,7 @@ except Exception:
 try:
     from telegram.ext import (
         Application,
+    ApplicationHandlerStop,
         CallbackQueryHandler,
         CommandHandler,
         ContextTypes,
@@ -284,6 +286,26 @@ def set_session(context: ContextTypes.DEFAULT_TYPE, session: dict) -> None:
 
 def clear_session(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("session", None)
+
+
+async def dedupe_update_guard(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Drop duplicated Telegram updates (same update_id) to prevent double replies.
+    """
+    uid = getattr(update, "update_id", None)
+    if uid is None:
+        return
+    now = datetime.utcnow().timestamp()
+    seen: dict[int, float] = context.application.bot_data.setdefault("_seen_update_ids", {})
+    if uid in seen:
+        raise ApplicationHandlerStop
+    seen[uid] = now
+    # Keep memory bounded and prune old ids.
+    if len(seen) > 2000:
+        cutoff = now - 600
+        for k in list(seen.keys()):
+            if seen[k] < cutoff:
+                seen.pop(k, None)
 
 
 async def send_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2342,6 +2364,10 @@ def main() -> None:
     app = Application.builder().token(settings.bot_token).concurrent_updates(True).build()
     app.bot_data["settings"] = settings
     app.bot_data["global_premium"] = int(global_premium or 0)
+    app.bot_data["_seen_update_ids"] = {}
+
+    # Guard against duplicate deliveries before all other handlers.
+    app.add_handler(MessageHandler(filters.ALL, dedupe_update_guard), group=-1)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
@@ -2385,7 +2411,18 @@ def main() -> None:
     except Exception:
         pass
 
-    app.run_polling(allowed_updates=Update.ALL_TYPES, poll_interval=0.5)
+    def _polling_error_callback(err: Exception) -> None:
+        # If another instance is polling the same token, exit quickly instead of noisy retry loops.
+        if isinstance(err, Conflict):
+            raise SystemExit(
+                "Telegram conflict: another getUpdates instance is running for this bot token."
+            )
+
+    app.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        poll_interval=0.5,
+        error_callback=_polling_error_callback,
+    )
 
 
 if __name__ == "__main__":
