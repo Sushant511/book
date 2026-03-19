@@ -4,6 +4,8 @@ from datetime import date, datetime, timedelta, time as dtime
 from decimal import Decimal
 from io import BytesIO
 import telegram
+import subprocess
+import sys
 
 import matplotlib
 
@@ -18,14 +20,28 @@ try:
 except Exception:
     # PTB v13 fallback
     from telegram import ChatAction
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
+try:
+    from telegram.ext import (
+        Application,
+        CallbackQueryHandler,
+        CommandHandler,
+        ContextTypes,
+        MessageHandler,
+        filters,
+    )
+except ImportError:
+    # Railway/container fallback: force-install PTB v20 if old PTB got installed.
+    subprocess.check_call(
+        [sys.executable, "-m", "pip", "install", "--no-cache-dir", "python-telegram-bot==20.8"]
+    )
+    from telegram.ext import (
+        Application,
+        CallbackQueryHandler,
+        CommandHandler,
+        ContextTypes,
+        MessageHandler,
+        filters,
+    )
 
 from config import is_admin as is_admin_cfg, load_settings
 from db import (
